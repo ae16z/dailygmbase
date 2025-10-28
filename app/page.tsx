@@ -1,65 +1,180 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useAccount, useWriteContract, useReadContract } from 'wagmi';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { parseAbi } from 'viem';
+
+// === Kontrak ===
+const CONTRACT_ADDRESS = '0x1e87B0f7F71B2c217dc68004e4fc81c27C44a651';
+const ABI = parseAbi([
+  'function gm() external',
+  'function lastGM(address) view returns (uint256)',
+]);
 
 export default function Home() {
+  const { address, isConnected } = useAccount();
+  const { writeContract, isPending } = useWriteContract();
+
+  const [gmToday, setGmToday] = useState(false);
+  const [nextGM, setNextGM] = useState<number | null>(null);
+  const [status, setStatus] = useState('Say GM to earn your blessings ☀️');
+  const [gmList, setGmList] = useState<{ user: string; time: number }[]>([]);
+
+  // ====== Cek status GM user ======
+  async function checkGmStatus() {
+    if (!isConnected || !address) return;
+    try {
+      const res = await fetch(`/api/read?address=${address}`);
+      const data = await res.json();
+
+      const lastGm = BigInt(data.lastGm || 0);
+      const now = BigInt(Math.floor(Date.now() / 1000));
+
+      if (now - lastGm < BigInt(86400)) {
+        setGmToday(true);
+        setNextGM(Number(lastGm) + 86400);
+        setStatus('✅ You already said GM today!');
+      } else {
+        setGmToday(false);
+        setStatus('☀️ Ready to GM again!');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  // ====== Kirim GM ======
+  async function sendGm() {
+    if (!isConnected) {
+      setStatus('⚠️ Please connect your wallet first.');
+      return;
+    }
+
+    try {
+      setStatus('⏳ Sending GM...');
+      await writeContract({
+        address: CONTRACT_ADDRESS,
+        abi: ABI,
+        functionName: 'gm',
+      });
+
+      setStatus('✅ GM sent successfully!');
+      setGmToday(true);
+      setNextGM(Math.floor(Date.now() / 1000) + 86400);
+
+      // Simpan ke leaderboard
+      setGmList((prev) => [
+        ...prev,
+        { user: address!, time: Math.floor(Date.now() / 1000) },
+      ]);
+    } catch (err: any) {
+      console.error(err);
+      setStatus('❌ Transaction failed.');
+    }
+  }
+
+  useEffect(() => {
+    checkGmStatus();
+  }, [isConnected, address]);
+
+  // ====== UI ======
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        background: 'linear-gradient(180deg, #000000, #1a1a1a)',
+        color: 'white',
+        fontFamily: 'Poppins, sans-serif',
+      }}
+    >
+      <div
+        style={{
+          textAlign: 'center',
+          maxWidth: 500,
+          padding: 30,
+          background: 'rgba(255,255,255,0.05)',
+          borderRadius: 16,
+          boxShadow: '0 0 20px rgba(255,255,255,0.1)',
+        }}
+      >
+        <h1 style={{ fontSize: '2rem', marginBottom: 20 }}>🌅 Daily GM</h1>
+
+        <ConnectButton />
+
+        <p style={{ marginTop: 20, minHeight: 24 }}>{status}</p>
+
+        <button
+          onClick={sendGm}
+          disabled={!isConnected || isPending || gmToday}
+          style={{
+            marginTop: 20,
+            padding: '10px 25px',
+            background: !isConnected
+              ? '#333'
+              : gmToday
+              ? '#555'
+              : '#00cc88',
+            color: 'white',
+            borderRadius: 10,
+            border: 'none',
+            cursor: !isConnected
+              ? 'not-allowed'
+              : gmToday
+              ? 'not-allowed'
+              : 'pointer',
+            fontSize: '1rem',
+            transition: '0.3s',
+          }}
+          onMouseEnter={(e) =>
+            !gmToday &&
+            isConnected &&
+            (e.currentTarget.style.background = '#00e69b')
+          }
+          onMouseLeave={(e) =>
+            !gmToday &&
+            isConnected &&
+            (e.currentTarget.style.background = '#00cc88')
+          }
+        >
+          {isPending
+            ? 'Processing...'
+            : !isConnected
+            ? 'Connect wallet to GM'
+            : gmToday
+            ? 'Already GM ☀️'
+            : 'Send GM'}
+        </button>
+
+        {nextGM && (
+          <p style={{ marginTop: 20 }}>
+            ⏰ Next GM available at:{' '}
+            <span style={{ color: '#00e69b' }}>
+              {new Date(nextGM * 1000).toLocaleString()}
+            </span>
           </p>
+        )}
+
+        <div style={{ marginTop: 30 }}>
+          <h3>🌍 GM Leaderboard (Today)</h3>
+          {gmList.length === 0 ? (
+            <p>No one has said GM yet!</p>
+          ) : (
+            <ul style={{ textAlign: 'left', marginTop: 10 }}>
+              {gmList.map((item, idx) => (
+                <li key={idx}>
+                  {item.user.slice(0, 6)}...{item.user.slice(-4)} —{' '}
+                  {new Date(item.time * 1000).toLocaleTimeString()}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      </div>
+    </main>
   );
 }
+
