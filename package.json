@@ -16,7 +16,7 @@
   "react-dom": "^18.3.0",
   "viem": "^2.38.5",
   "wagmi": "^2.19.0",
-  "@farcaster/miniapp-sdk": "^1.0.0"  // tambahkan Farcaster SDK
+  "@farcaster/miniapp-sdk": "^1.0.0"
 }
   },
   "devDependencies": {
