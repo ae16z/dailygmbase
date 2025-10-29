@@ -9,6 +9,8 @@ import {
 } from '@rainbow-me/rainbowkit';
 import { base } from 'wagmi/chains';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { sdk } from '@farcaster/miniapp-sdk'; // <-- import SDK
+import { useEffect } from 'react';
 
 const config = getDefaultConfig({
   appName: 'Daily GM',
@@ -23,6 +25,10 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  useEffect(() => {
+    sdk.actions.ready(); // <-- panggil SDK di sini
+  }, []);
+
   return (
     <html lang="en">
       <body
@@ -45,4 +51,3 @@ export default function RootLayout({
     </html>
   );
 }
-
